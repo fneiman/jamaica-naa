@@ -1,6 +1,7 @@
 
 # jaNAA.R
-# R code for the analusis of NAA samples from Jamaica
+# R code for the analysis of NAA samples from Jamaica
+# includes detection of ouliers, PCA, clustering and LDA without them 
 # Started:     3.26.2018 FDN
 # Last Update: 4.1.2018 FDN 
 
