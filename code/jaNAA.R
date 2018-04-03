@@ -1,5 +1,5 @@
 
-# jaNAA.R
+# jaNAA_k13.R
 # R code for the analysis of NAA samples from Jamaica
 # includes detection of ouliers, PCA, clustering and LDA without them 
 # Started:     3.26.2018 FDN
@@ -64,7 +64,6 @@ logJa <- a.out$imputations[[1]]
 
 # convert of z-scores
 logJa[,-1] <- scale(logJa[,-1]) 
-
 
 # number of site (Estate) names
 length(table(ja$Estate))
@@ -142,14 +141,7 @@ labelIndex<- (mddResults$dists[,'MD'] > mddResults$cutOff) &
 
 pointLabel(mddResults$dists[,'MD'][labelIndex], 
            mddResults$dists[,'rob.MD'][labelIndex], 
-           logJa$ANID[labelIndex])
-
-
-text(scoreDistances[labelIndex],orthDistances[labelIndex],
-#     logJa$ANID[labelIndex],
-#     cex=.75,
-#     pos=4,
-#     adj=1)
+           logJa$ANID[labelIndex], cex=.75)
 
 
 pointLabel(mddResults$dists[,'MD'], mddResults$dists[,'rob.MD'], logJa$ANID)
@@ -164,31 +156,71 @@ legend('bottomright', pch = as.numeric(Estates[,1]), pt.bg=Estates[,2],
 
 
 # Pull out the robust MD outliers: robust MD > 15
-mdOutliers<- logJa$ANID[(mddResults$dists[,'rob.MD'] >= 15)]
+mdOutliers<- logJa$ANID[(mddResults$dists[,'rob.MD'] >= 30)]
 mdOutliers <- cbind( rep('MD', length(mdOutliers)), as.character(mdOutliers))
-
-
 
 
 # 4. Outlier detection: Robust PCA al la Hubert ####
 
 ctrl1<-CovControlMcd(nsamp=10000)
 
-#  Hubert's RobPCA for 3 dimensions
+
+#  Hubert's RobPCA for 20 dimensions to decide on dimensionality
 pca<-PcaHubert(~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr + Cs + Eu + Fe + Hf + Rb + Sb + 
                  Sc + Sr + Ta + Tb + Th + Zn + Zr + Al + Ba + Ca + Dy + K +  Mn + Na + Ti + V , 
                data=logJa,
                trace=T,
                maxdir=10000,
                scale=T, 
-               alpha=.9, 
+               alpha=.95, 
                mcd=T,
-               k=3,
+               k=20,
                kmax=50,
                control =ctrl1
 )
 
 
+# first we check out the eigenvalues in a scree plot
+# define a function for the broken stick model  
+broken.stick <- function(p)
+  # Compute the expected values of the broken-stick distribution for 'p' pieces.
+  # Example: broken.stick.out.20 = broken.stick(20)
+  #             Pierre Legendre, April 2007
+{
+  result = matrix(0,p,2)
+  colnames(result) = c("j","E(j)")
+  for(j in 1:p) {
+    E = 0
+    for(x in j:p) E = E+(1/x)
+    result[j,1] = j
+    result[j,2] = E/p
+  }
+  return(result)
+}
+
+ProportionVariance<- attr(pca,"eigenvalues")/sum(attr(pca,"eigenvalues"))
+bs<-broken.stick(length(attr(pca,"eigenvalues")))
+barplot(ProportionVariance, names.arg=1:length(attr(pca,"eigenvalues")),
+        lwd=1, xlab="PC Order",
+        pch=21, bg="light grey", cex=1.5,
+        ylab= "Proportion of Variance", cex.axis=1.5, cex.lab=1.5)
+lines(bs[,1],bs[,2], col="black", lwd=2, lty=2)
+
+#  Hubert's RobPCA for 4 dimensions
+pca<-PcaHubert(~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr + Cs + Eu + Fe + Hf + Rb + Sb + 
+                 Sc + Sr + Ta + Tb + Th + Zn + Zr + Al + Ba + Ca + Dy + K +  Mn + Na + Ti + V , 
+               data=logJa,
+               trace=T,
+               maxdir=10000,
+               scale=T, 
+               alpha=.95, 
+               mcd=T,
+               k=4,
+               kmax=50,
+               control =ctrl1
+)
+
+# first we look at the outlier diagnostics
 
 orthDistances<-attr(pca,"od")
 scoreDistances<-attr(pca,"sd")
@@ -199,8 +231,6 @@ plot(scoreDistances,orthDistances,
      pch=ja$coastPch, 
      bg= adjustcolor(ja$estateCol, alpha=.5),
      cex.lab=1.5,
-     xlim= c(0,5),
-     ylim= c(0,8),
      xlab="Score Distances",
      ylab="Orthogonal Distances")
    
@@ -216,11 +246,11 @@ pointLabel(scoreDistances[labelIndex],orthDistances[labelIndex],
 Estates <- unique(cbind(ja$coastPch,ja$estateCol,ja$Estate))
 legend('bottomright', pch = as.numeric(Estates[,1]), pt.bg=Estates[,2], 
        legend=Estates[,3],
-       cex=.75,
+       cex=1,
        bty='o')
 
-# pull out ROBPCA outliers : orthogonal distances > 5
-orthOutliers <- logJa$ANID[(orthDistances > 5)] 
+# pull out ROBPCA outliers : orthogonal distances > 8
+orthOutliers <- logJa$ANID[(orthDistances > 8)] 
 orthOutliers <- cbind( rep('Orth', length(orthOutliers)), as.character(orthOutliers))
 
 
@@ -231,20 +261,13 @@ table(bothOutliers[,1], bothOutliers[,2] )
 outliers <- unique(bothOutliers[,2])
 
 
-# remove oultiers
+# create a data frame without outliers (.no)
 logJa.no <- filter(logJa, ! ANID %in% outliers)
 ja.no <- filter(ja, ! ANID %in% outliers)
 
-
-# create data frame with only outliers (oo)
-
+# create data frame with only outliers (.oo)
 logJa.oo <- filter(logJa,  ANID %in% outliers)
 ja.oo <- filter(ja,  ANID %in% outliers)
-
-
-
-
-
 
 
 # 6. Classical PCA w/o outliers  #####
@@ -256,6 +279,7 @@ pc1<-prcomp(~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr + Cs + Eu + Fe + H
 # vs. the covariance matrix 
  #get a summary
 summary(pc1)
+
 
 # first we check out the eigenvalues in a scree plot
 # define a function for the broken stick model  
@@ -282,32 +306,34 @@ barplot(ProportionVariance, names.arg=1:length(pc1$sd),
      ylab= "Proportion of Variance", cex.axis=1.5, cex.lab=1.5)
 lines(bs[,1],bs[,2], col="black", lwd=2, lty=2)
 
-# Do the distance biplot
-# plot the scores of the obs
-scores<-predict(pc1)
 
-plot(scores[,1],scores[,2], 
-     pch=ja$coastPch, 
+# plot the scores of the obs -- note we scale these to unit variance
+# so scatterplot distances approximate Mahalaobis D
+scores<-(predict(pc1))
+pcaZScores <- apply(scores, 2, scale)
+
+
+plot(pcaZScores[,1],pcaZScores[,2], 
+     pch=ja.no$coastPch, 
      bg= adjustcolor(ja.no$estateCol, alpha=.5),
      col="black", 
      #xlim= c(-10,10), ylim=c(-6,10),
      cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 2")
 
-#text(scores[,1],scores[,2], logJa.no$ANID, cex=.5)
 
 #plot the variables on PC1 and PC2
 plot(pc1$rotation[,1],pc1$rotation[,2], asp=1,type="n",
-     xlim= c(-.3,.3), ylim=c(-.3,.3),
+     #xlim= c(-.3,.3), ylim=c(-.3,.3),
      cex=2, cex.lab= 1.5, xlab="PC 1", ylab='PC 2')
 # Plot arrows: see ?arrows for the syntax 
 arrows(0, 0, pc1$rotation[,1],pc1$rotation[,2], len=.2, lwd=2, col="grey")
 abline(h=0,v=0,col="black", lwd=1, lty=2)
-text(1.05* pc1$rotation[,1] , 1.05* pc1$rotation[,2] , names(pc1$rotation[,1]),
+pointLabel(1.05* pc1$rotation[,1] , 1.05* pc1$rotation[,2] , names(pc1$rotation[,1]),
      col="black", cex=1.5)
 
 
-plot(scores[,1],scores[,3], 
-     pch=ja$coastPch, 
+plot(pcaZScores[,1],pcaZScores[,3], 
+     pch=ja.no$coastPch, 
      bg= adjustcolor(ja.no$estateCol, alpha=.5),
      cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 3")
 #text(scores[,1]+1,scores[,3]+1, logJa.no$anid, cex=.5)
@@ -317,7 +343,7 @@ plot(scores[,1],scores[,3],
 
 plot(pc1$rotation[,1],pc1$rotation[,3], asp=1,type="n",
      xlim= c(-.3,.3), ylim=c(-.3,.3),
-     cex=2, cex.lab= 1.5, xlab="PC 1", ylab='PC 2')
+     cex=2, cex.lab= 1.5, xlab="PC 1", ylab='PC 3')
 # Plot arrows: see ?arrows for the syntax 
 arrows(0, 0, pc1$rotation[,1],pc1$rotation[,3], len=.2, lwd=2, col="grey")
 abline(h=0,v=0,col="black", lwd=1, lty=2)
@@ -346,6 +372,9 @@ plot3d(scores[,1],
 #        adj = c(-.5,.5))
 
 
+
+
+
 # 7. PAM with ouliers removed ####
 
 # the first step is to choose the number of clusters
@@ -360,44 +389,130 @@ silAvgWidth <- function(data, maxK){
   return(cbind(nClusters, avgWidth))
 }
 
-# call the function and make the plot
+# for the raw data: call the function and make the plot
 silPlot <- silAvgWidth(data = logJa.no[,-1] , maxK=20)
 
 plot(silPlot, type='b', pch=21, cex= 2, bg='grey',
      xlab = 'Number of Clusters (k)',
      ylab = 'Mean Silouette Width',
      cex.lab= 1.5)
-abline( v=7, col='red', lty=2)
+abline( v=9, col='red', lty=2)
+
+# For the Rob PCA zscores on PC 1-4: call the function and make the plot
+# first recompute without outliers
+#  Hubert's RobPCA for 4 dimensions
+pca<-PcaHubert(~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr + Cs + Eu + Fe + Hf + Rb + Sb + 
+                 Sc + Sr + Ta + Tb + Th + Zn + Zr + Al + Ba + Ca + Dy + K +  Mn + Na + Ti + V , 
+               data=logJa.no,
+               trace=T,
+               maxdir=10000,
+               scale=T, 
+               alpha=.95, 
+               mcd=T,
+               k=4,
+               kmax=50,
+               control =ctrl1
+)
+robPCAZScores <- apply(getScores(pca), 2, scale) 
+silPlot <- silAvgWidth(data = robPCAZScores, maxK=20)
+
+plot(silPlot, type='b', pch=21, cex= 2, bg='grey',
+     xlab = 'Number of Clusters (k)',
+     ylab = 'Mean Silouette Width',
+     cex.lab= 1.5)
+abline( v=8, col='red', lty=2)
+
+
+# for the Classical PCA zscores on PC 1-4: call the function and make the plot
+silPlot <- silAvgWidth(data = pcaZScores[,1:4] , maxK=30)
+
+plot(silPlot, type='b', pch=21, cex= 2, bg='grey',
+     xlab = 'Number of Clusters (k)',
+     ylab = 'Mean Silouette Width',
+     cex.lab= 1.5)
+abline( v=8, col='red', lty=2)
+
+
+# for the Classical PCA zscores on PC 1-32: call the function and make the plot
+silPlot <- silAvgWidth(data = pcaZScores , maxK=20)
+
+plot(silPlot, type='b', pch=21, cex= 2, bg='grey',
+     xlab = 'Number of Clusters (k)',
+     ylab = 'Mean Silouette Width',
+     cex.lab= 1.5)
+abline( v=8, col='red', lty=2)
 
 
 # now we look at  Tibshiani et al's gap statsitsic 
 
-gapStatpam <- clusGap(logJa.no[,-1], FUN = pam, 
-                       K.max = 20, B = 500)
+
+gapStatpam <- clusGap(logJa.no[,-1], FUN = pam, d.power=2,
+                      K.max = 20, B = 500)
+kHat<- maxSE(gapStatpam$Tab[, "gap"], gapStatpam$Tab[, "SE.sim"], method="Tibs2001SEmax")
+
 plot(gapStatpam, pch=21, cex=2, bg='grey',
-     main= '',
+     xlab = 'Number of Clusters (k)',
+     cex.lab= 1.5,
+     main = 'Gap Statistics* for Data')
+abline( v=kHat, col='red', lty=2)
+
+apply(getScores(pca)[,1:4], 2, FUN=sd)
+
+
+gapStatpam <- clusGap(robPCAZScores , FUN = pam, d.power=2,
+                      K.max = 20, B = 50)
+
+kHat<- maxSE(gapStatpam$Tab[, "gap"], gapStatpam$Tab[, "SE.sim"], method="Tibs2001SEmax")
+
+plot(gapStatpam, pch=21, cex=2, bg='grey',
+     xlab = 'Number of Clusters (k)',
+     cex.lab= 1.5,
+     main = 'Gap Statistics* for Robust PCs 1:4')
+abline( v=kHat, col='red', lty=2)
+
+
+gapStatpam <- clusGap(pcaZScores[,1:4], FUN = pam, d.power=2,
+                      K.max = 30, B = 500)
+
+kHat<- maxSE(gapStatpam$Tab[, "gap"], gapStatpam$Tab[, "SE.sim"], method="Tibs2001SEmax")
+
+plot(gapStatpam, pch=21, cex=2, bg='grey',
+     xlab = 'Number of Clusters (k)',
+     cex.lab= 1.5,
+     main = 'Gap Statistics* for Classical PCs 1:4')
+abline( v=kHat, col='red', lty=2)
+
+
+gapStatpam <- clusGap(scores, FUN = pam, d.power=2,
+                      K.max = 20, B = 500)
+
+kHat<- maxSE(gapStatpam$Tab[, "gap"], gapStatpam$Tab[, "SE.sim"],
+             method="Tibs2001SEmax")
+
+plot(gapStatpam, pch=21, cex=2, bg='grey',
+     main= 'Gap Statistics* for Classical PCs 1:32',
      xlab = 'Number of Clusters (k)',
      cex.lab= 1.5)
-abline( v=7, col='red', lty=2)
-     
-
-# both agree on k=7. so...
+abline( v=kHat, col='red', lty=2)
 
 
-library(cluster)
-pam.K <- pam(logJa.no[,-1], k=7)
+
+
+# is there a consensus on k=8. so...
+
+pam.K <- pam(pcaZScores[,1:4], k=8)
 
 
 # colors for Compositional Groups
 fillCol1 <- brewer.pal (12, name='Paired')
 
-
-plot(scores[,1],scores[,2], 
+plot(pcaZScores[,1], pcaZScores[,2], 
      pch=21, 
-     bg= adjustcolor(fillCol1[pam.K$clustering], alpha=.5),
+     bg= adjustcolor(fillCol1[pam.K$clustering], alpha=.75),
      col="black", 
      #xlim= c(-10,10), ylim=c(-6,10),
-     cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 2")
+     cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 2",
+     asp=1)
 
 legend('bottomright', 
        pch = rep(21, max(pam.K$clustering)) ,
@@ -407,12 +522,13 @@ legend('bottomright',
        cex=.75,
        bty='o')
 
-plot(scores[,1],scores[,3], 
+plot(pcaScores[,1], pcaZScores[,3], 
      pch=21, 
-     bg= adjustcolor(fillCol1[pam.K$clustering], alpha=.5),
+     bg= adjustcolor(fillCol1[pam.K$clustering], alpha=.75),
      col="black", 
      #xlim= c(-10,10), ylim=c(-6,10),
-     cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 3")
+     cex=2, cex.lab= 1.5, xlab="PC 1", ylab="PC 3",
+     asp=1)
 
 
 plot3d(scores[,1],
@@ -435,6 +551,7 @@ LDAfit <- lda(pam.K$clustering ~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr
                 Sc + Sr + Ta + Tb + Th + Zn + Zr + Al + Ba + Ca + Dy + K +  Mn + Na + Ti + V, 
                data=logJa.no, 
                na.action="na.omit",  method="moment")
+
 
 # summarize proportion of among-group variance accounted for
 
@@ -467,6 +584,7 @@ points(LDAPreds$x[,1],LDAPreds$x[,2],
        cex=2) 
 
 
+pointLabel(LDAScores$x[,1],LDAScores$x[,2], as.character(pam.K$clustering), cex=.5 )
 pointLabel(LDAPreds$x[,1],LDAPreds$x[,2],logJa.oo$ANID, allowSmallOverlap = F, cex=.5 )
 
 
@@ -517,8 +635,8 @@ PlotEllipses (X.Var=LDAScores$x[,1],Y.Var=LDAScores$x[,2],
 
 
 
-# plot the outlilers only - they seem include a comp.group
-# and two way-out points JAM315 and JAM016, and possibly JAM462 
+# plot the outliers only - they seem include a comp.group
+# and and a way out point:  JAM016 
 
 
 plot(LDAPreds$x[,1],LDAPreds$x[,2],    
@@ -526,7 +644,6 @@ plot(LDAPreds$x[,1],LDAPreds$x[,2],
      bg=adjustcolor('yellow',alpha=.75) ,
      col="black",
      cex=2)
-
 
 pointLabel(LDAPreds$x[,1],LDAPreds$x[,2],logJa.oo$ANID, allowSmallOverlap = F, cex=.5 )
 
@@ -544,14 +661,7 @@ pointLabel(1.1* LDAfit$scaling[,1],1.1 * LDAfit$scaling[,2] ,
      rownames(LDAfit$scaling),
      col="black", cex=1)
 
-
-# plot the scores on DF1 and DF3
-plot(LDAScores$x[,1],LDAScores$x[,3],  	
-     pch= 21,
-     bg= adjustcolor(fillCol1[pam.K$cluster], alpha=.75) ,
-     col="black", 
-     cex=2, cex.lab= 1.5, xlab="Function 1", ylab="Function 3")
-
+ 
 points(LDAPreds$x[,1],LDAPreds$x[,3],    
        pch=23, 
        bg=adjustcolor('yellow',alpha=.75) ,
@@ -599,7 +709,7 @@ spheres3d(LDAPreds$x[,1],
 LDAfit.cv <- lda(pam.K$clustering ~ As + La + Lu + Nd + Sm + U +  Yb + Ce + Co + Cr + Cs + Eu + Fe + Hf + Rb + Sb + 
                 Sc + Sr + Ta + Tb + Th + Zn + Zr + Al + Ba + Ca + Dy + K +  Mn + Na + Ti + V, 
               data=logJa.no, 
-              na.action="na.omit",  CV=T, method="moment", prior= rep(1,7)/7 )
+              na.action="na.omit",  CV=T, method="moment", prior= rep(1,max(pam.K$clustering))/max(pam.K$clustering) )
 
 ct <- table(pam.K$clustering, LDAfit.cv$class)
 
@@ -607,4 +717,13 @@ ct
 diag(prop.table(ct, 1))
 # total percent correct
 sum(diag(prop.table(ct)))
+
+
+table(pam.K$clustering, ja.no$Estate)
+
+
+
+
+
+
 
